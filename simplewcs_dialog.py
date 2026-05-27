@@ -959,7 +959,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         else:
             axisList = getAxisLabels(subsetCrsUri)
             if not axisList:
-                logInfoMessage(f"Axis labels of subset crs could not be found. Native crs is used as subset crs instead.")
+                logInfoMessage("Axis labels of subset crs could not be found. Native crs is used as subset crs instead.")
                 axisLabel0, axisLabel1 = self.describeCov.coverageInformation[covId].axisLabels
                 subsetCrsUri = nativeCrsUri
             elif len(axisList) > 2:
