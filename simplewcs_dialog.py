@@ -31,9 +31,9 @@ from qgis.core import (QgsApplication,
                        Qgis,
                        QgsTask,
                        QgsRasterLayer,
-                       QgsRectangle,
-                       QgsRasterLayer,)
-from qgis.gui import QgsMessageBar
+                       QgsRectangle)
+from qgis.gui import (QgsMessageBar,
+                      QgsAuthSettingsWidget)
 from qgis.utils import iface
 
 from qgis.PyQt import uic
@@ -123,7 +123,6 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         self.messageBar.hide()
 
         self.setupUrlTab()
-
         self.setupGetCoverageTab()
 
     def setupUrlTab(self) -> None:
@@ -133,8 +132,34 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         """
         self.cbVersion.addItems(self.acceptedWcsVersions)
         self.cbVersion.setCurrentIndex(1)
+        self.setupAuthGui()
         self.loadSavedServices()
         self.updateUrlManagerButtons()
+
+    def setupAuthGui(self) -> None:
+        """
+        Sets up the QGIS QgsAuthSettingsWidget, used for managing authentications.
+        """
+        authcfg = self.get_auth_configID()
+        # TODO add parent for QgsAuthSettingsWidget to simplewcs_dialog_base.ui to ensure a better look
+        self.auth_gui = QgsAuthSettingsWidget(self.tabUrl, configId = authcfg, dataprovider = 'wcs')
+        self.auth_gui.move(20,320) 
+        self.auth_gui.removeBasicSettings()
+
+    def get_auth_configID(self, service_index: int | None = None) -> str:
+        """returns the auth configID of the service with the given index. If none is given,
+        the configID of the currently selected service is returned.
+
+        Args:
+            service_index (int | None, optional): Index of the saved Service configuration. Defaults to None.
+
+        Returns:
+            str: configID of the authentication cofiguration of the QGIS Authentication Framework.
+        """
+        if not service_index:
+            service_index = self.getSelectedSavedServiceIndex()
+        authcfg = self.savedServices[service_index].get('authcfg','') if isinstance(service_index, int) else ''
+        return authcfg
 
     def setupGetCoverageTab(self) -> None:
         """
@@ -187,18 +212,19 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
     def getSelectedSavedServiceIndex(self) -> Optional[int]:
         return self.cbSavedServices.currentData()
 
-    def normalizeSavedService(self, service: dict) -> Optional[dict]:
+    def normalizeSavedService(self, service: dict) -> Optional[dict[str,str]]:
         if not isinstance(service, dict):
             return None
 
         name = str(service.get('name', '')).strip()
         url = str(service.get('url', '')).strip()
         version = str(service.get('version', '')).strip()
+        authcfg = str(service.get('authcfg', '')).strip()
 
         if not url or version not in self.acceptedWcsVersions:
             return None
 
-        return {'name': name, 'url': url, 'version': version}
+        return {'name': name, 'url': url, 'version': version, 'authcfg': authcfg}
 
     def getSavedServiceIdentity(self, service: dict) -> Tuple[str, str]:
         return service['url'], service['version']
@@ -271,6 +297,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         self.leServiceName.setText(service.get('name', ''))
         self.leBaseUrl.setText(service['url'])
         versionIndex = self.cbVersion.findText(service['version'])
+        self.auth_gui.setConfigId(service.get('authcfg',''))
         if versionIndex >= 0:
             self.cbVersion.setCurrentIndex(versionIndex)
         self.persistSavedServices(selectedIndex=index)
@@ -295,6 +322,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         self.cbVersion.setCurrentIndex(1)
         self.updateUrlManagerButtons()
         self.leServiceName.setFocus()
+        self.auth_gui.setConfigId('')
 
     def saveCurrentService(self) -> None:
         serviceName = self.leServiceName.text().strip()
@@ -308,7 +336,8 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         service = {
             'name': serviceName,
             'url': baseUrl,
-            'version': self.cbVersion.currentText()
+            'version': self.cbVersion.currentText(),
+            'authcfg': self.auth_gui.configId()
         }
         selectedIndex = self.getSelectedSavedServiceIndex()
         serviceIdentity = self.getSavedServiceIdentity(service)
@@ -719,7 +748,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         """
 
         capabilitiesRequest = self.buildCapabilitiesRequest(version=version, baseUrl=baseUrl)
-        capabilitiesStr = sendRequest(request=capabilitiesRequest)
+        capabilitiesStr = sendRequest(request=capabilitiesRequest, authcfg = self.auth_gui.configId())
         try:
             root = ET.fromstring(capabilitiesStr) # nosec
             capabilitiesXmlMainTag = root.tag
@@ -751,7 +780,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
             DescribeCoverageException, if any error occurs and the response is not a descrive coverage document
         """
         coverageRequest = self.buildDescribeCoverageRequest(covIds, version)
-        coverageStr = sendRequest(request=coverageRequest)
+        coverageStr = sendRequest(request=coverageRequest, authcfg = self.auth_gui.configId())
         try:
             root = ET.fromstring(coverageStr) # nosec
             coverageXmlMainTag = root.tag
@@ -885,6 +914,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
 
         try:
             url, covId = self.getCovQueryStr()
+            authcfg = self.auth_gui.configId()
         except ValueError as e:
             self.logWarnMessage(str(e))
             return
@@ -896,6 +926,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
             getCoverage,
             url,
             covId,
+            authcfg,
             on_finished=self.addRLayer,
             flags=QgsTask.Flag.CanCancel
         )
@@ -1115,12 +1146,12 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         self.messageBar.pushMessage(msg, level=level, duration=duration)
 
 
-def getCoverage(task, urlGetCoverage: str, covId: str) -> dict:
+def getCoverage(task, urlGetCoverage: str, covId: str, authcfg: str = '') -> dict:
     """Requests get coverage using QgsNetworkAccessManager"""
     logInfoMessage('Requested URL: ' + urlGetCoverage)
     try:
         networkManager = QgsNetworkAccessManager()
-        resultGetCoverage = networkManager.blockingGet(QNetworkRequest(QUrl(urlGetCoverage)))
+        resultGetCoverage = networkManager.blockingGet(QNetworkRequest(QUrl(urlGetCoverage)), authCfg = authcfg)
         replyContent = resultGetCoverage.content()
     except HTTPError as e:
         logWarnMessage(str(e))
@@ -1142,10 +1173,10 @@ def getCoverage(task, urlGetCoverage: str, covId: str) -> dict:
         return {'file': replyContent, 'coverage': covId}
 
 
-def sendRequest(request: str) -> str:
+def sendRequest(request: str, authcfg: str = '') -> str:
     networkManager = QgsNetworkAccessManager.instance()
     request = QNetworkRequest(QUrl(request))
-    reply = networkManager.blockingGet(request)
+    reply = networkManager.blockingGet(request, authCfg = authcfg)
     replyContent = reply.content()
     reply = bytes(replyContent).decode()
     return reply
