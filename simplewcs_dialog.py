@@ -10,7 +10,7 @@ import os
 import json
 import urllib
 import xml.etree.ElementTree as ET # nosec
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 from urllib.error import HTTPError, URLError
 
 from qgis.PyQt.QtCore import (Qt,
@@ -31,9 +31,9 @@ from qgis.core import (QgsApplication,
                        Qgis,
                        QgsTask,
                        QgsRasterLayer,
-                       QgsRectangle,
-                       QgsRasterLayer,)
-from qgis.gui import QgsMessageBar
+                       QgsRectangle)
+from qgis.gui import (QgsMessageBar,
+                      QgsAuthSettingsWidget)
 from qgis.utils import iface
 
 from qgis.PyQt import uic
@@ -71,24 +71,24 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         super().__init__(iface.mainWindow())
 
         # Subset coordinates (polygon mode)
-        self.requestXMinPolygon: Optional[float] = None
-        self.requestYMinPolygon: Optional[float] = None
-        self.requestXMaxPolygon: Optional[float] = None
-        self.requestYMaxPolygon: Optional[float] = None
+        self.requestXMinPolygon: float | None = None
+        self.requestYMinPolygon: float | None = None
+        self.requestXMaxPolygon: float | None = None
+        self.requestYMaxPolygon: float | None = None
 
         # Subset coordinates (canvas mode)
-        self.requestXMinCanvas: Optional[float] = None
-        self.requestYMinCanvas: Optional[float] = None
-        self.requestXMaxCanvas: Optional[float] = None
-        self.requestYMaxCanvas: Optional[float] = None
+        self.requestXMinCanvas: float | None = None
+        self.requestYMinCanvas: float | None = None
+        self.requestXMaxCanvas: float | None = None
+        self.requestYMaxCanvas: float | None = None
 
-        self.coverageBoundingBox: Optional[BoundingBox] = None
-        self.subsetBoundingBox: Optional[BoundingBox] = None
+        self.coverageBoundingBox: BoundingBox | None = None
+        self.subsetBoundingBox: BoundingBox | None = None
 
-        self.capabilities: Optional[Capabilities] = None
-        self.describeCov: Optional[DescribeCoverage] = None
+        self.capabilities: Capabilities | None = None
+        self.describeCov: DescribeCoverage | None = None
 
-        self.sketchingToolAction: Optional[QAction] = None
+        self.sketchingToolAction: QAction | None = None
 
         self.mapCrs: str = self.getMapCrs()
 
@@ -123,7 +123,6 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         self.messageBar.hide()
 
         self.setupUrlTab()
-
         self.setupGetCoverageTab()
 
     def setupUrlTab(self) -> None:
@@ -133,8 +132,34 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         """
         self.cbVersion.addItems(self.acceptedWcsVersions)
         self.cbVersion.setCurrentIndex(1)
+        self.setupAuthGui()
         self.loadSavedServices()
         self.updateUrlManagerButtons()
+
+    def setupAuthGui(self) -> None:
+        """
+        Sets up the QGIS QgsAuthSettingsWidget, used for managing authentications.
+        """
+        authcfg = self.get_auth_configID()
+        # TODO add parent for QgsAuthSettingsWidget to simplewcs_dialog_base.ui to ensure a better look
+        self.auth_gui = QgsAuthSettingsWidget(self.tabUrl, configId = authcfg, dataprovider = 'wcs')
+        self.auth_gui.move(20,320) 
+        self.auth_gui.removeBasicSettings()
+
+    def get_auth_configID(self, service_index: int | None = None) -> str:
+        """returns the auth configID of the service with the given index. If none is given,
+        the configID of the currently selected service is returned.
+
+        Args:
+            service_index (int | None, optional): Index of the saved Service configuration. Defaults to None.
+
+        Returns:
+            str: configID of the authentication cofiguration of the QGIS Authentication Framework.
+        """
+        if not service_index:
+            service_index = self.getSelectedSavedServiceIndex()
+        authcfg = self.savedServices[service_index].get('authcfg','') if isinstance(service_index, int) else ''
+        return authcfg
 
     def setupGetCoverageTab(self) -> None:
         """
@@ -184,21 +209,22 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
             return serviceName
         return f"{service['url']} [{service['version']}]"
 
-    def getSelectedSavedServiceIndex(self) -> Optional[int]:
+    def getSelectedSavedServiceIndex(self) -> int | None:
         return self.cbSavedServices.currentData()
 
-    def normalizeSavedService(self, service: dict) -> Optional[dict]:
+    def normalizeSavedService(self, service: dict) -> dict[str,str] | None:
         if not isinstance(service, dict):
             return None
 
         name = str(service.get('name', '')).strip()
         url = str(service.get('url', '')).strip()
         version = str(service.get('version', '')).strip()
+        authcfg = str(service.get('authcfg', '')).strip()
 
         if not url or version not in self.acceptedWcsVersions:
             return None
 
-        return {'name': name, 'url': url, 'version': version}
+        return {'name': name, 'url': url, 'version': version, 'authcfg': authcfg}
 
     def getSavedServiceIdentity(self, service: dict) -> Tuple[str, str]:
         return service['url'], service['version']
@@ -224,7 +250,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
 
         self.refreshSavedServicesCombo(selectLastService=True)
 
-    def persistSavedServices(self, selectedIndex: Optional[int] = None) -> None:
+    def persistSavedServices(self, selectedIndex: int | None = None) -> None:
         self.settings.setValue(SETTINGS_SAVED_SERVICES, json.dumps(self.savedServices))
 
         if selectedIndex is None:
@@ -235,7 +261,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
             self.settings.remove(SETTINGS_LAST_SERVICE)
 
     def refreshSavedServicesCombo(self,
-                                  selectedIndex: Optional[int] = None,
+                                  selectedIndex: int | None = None,
                                   selectLastService: bool = False) -> None:
         currentLabel = None
         if selectLastService:
@@ -271,6 +297,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         self.leServiceName.setText(service.get('name', ''))
         self.leBaseUrl.setText(service['url'])
         versionIndex = self.cbVersion.findText(service['version'])
+        self.auth_gui.setConfigId(service.get('authcfg',''))
         if versionIndex >= 0:
             self.cbVersion.setCurrentIndex(versionIndex)
         self.persistSavedServices(selectedIndex=index)
@@ -295,6 +322,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         self.cbVersion.setCurrentIndex(1)
         self.updateUrlManagerButtons()
         self.leServiceName.setFocus()
+        self.auth_gui.setConfigId('')
 
     def saveCurrentService(self) -> None:
         serviceName = self.leServiceName.text().strip()
@@ -308,7 +336,8 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         service = {
             'name': serviceName,
             'url': baseUrl,
-            'version': self.cbVersion.currentText()
+            'version': self.cbVersion.currentText(),
+            'authcfg': self.auth_gui.configId()
         }
         selectedIndex = self.getSelectedSavedServiceIndex()
         serviceIdentity = self.getSavedServiceIdentity(service)
@@ -719,14 +748,14 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         """
 
         capabilitiesRequest = self.buildCapabilitiesRequest(version=version, baseUrl=baseUrl)
-        capabilitiesStr = sendRequest(request=capabilitiesRequest)
+        capabilitiesStr = sendRequest(request=capabilitiesRequest, authcfg = self.auth_gui.configId())
         try:
             root = ET.fromstring(capabilitiesStr) # nosec
             capabilitiesXmlMainTag = root.tag
             if capabilitiesXmlMainTag != f'{wcs_ns}Capabilities':
                 raise CapabilitiesException('Error: Could not read capabilities for this service')
             capabilitiesXml = ET.ElementTree(ET.fromstring(capabilitiesStr)) # nosec
-        except:
+        except Exception:
             raise CapabilitiesException('Error: Could not read capabilities for this service')
 
         return capabilitiesXml
@@ -751,14 +780,14 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
             DescribeCoverageException, if any error occurs and the response is not a descrive coverage document
         """
         coverageRequest = self.buildDescribeCoverageRequest(covIds, version)
-        coverageStr = sendRequest(request=coverageRequest)
+        coverageStr = sendRequest(request=coverageRequest, authcfg = self.auth_gui.configId())
         try:
             root = ET.fromstring(coverageStr) # nosec
             coverageXmlMainTag = root.tag
             if coverageXmlMainTag != f'{wcs_ns}CoverageDescriptions':
                 raise DescribeCoverageException('Error: Could not read describeCoverage for this service')
             describeCoverageXml = ET.ElementTree(ET.fromstring(coverageStr)) # nosec
-        except:
+        except Exception:
             raise DescribeCoverageException('Error: Could not read describeCoverage for this service')
 
         return describeCoverageXml
@@ -832,7 +861,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
                     y_1 = float(y_1)
                     x_2 = float(x_2)
                     y_2 = float(y_2)
-                except:
+                except Exception:
                     warningMessage = 'No bounding box available for this coverage'
                     self.writeToPluginMessageBar(warningMessage)
                     logWarnMessage(warningMessage)
@@ -885,6 +914,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
 
         try:
             url, covId = self.getCovQueryStr()
+            authcfg = self.auth_gui.configId()
         except ValueError as e:
             self.logWarnMessage(str(e))
             return
@@ -896,6 +926,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
             getCoverage,
             url,
             covId,
+            authcfg,
             on_finished=self.addRLayer,
             flags=QgsTask.Flag.CanCancel
         )
@@ -928,7 +959,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         else:
             axisList = getAxisLabels(subsetCrsUri)
             if not axisList:
-                logInfoMessage(f"Axis labels of subset crs could not be found. Native crs is used as subset crs instead.")
+                logInfoMessage("Axis labels of subset crs could not be found. Native crs is used as subset crs instead.")
                 axisLabel0, axisLabel1 = self.describeCov.coverageInformation[covId].axisLabels
                 subsetCrsUri = nativeCrsUri
             elif len(axisList) > 2:
@@ -1115,12 +1146,12 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         self.messageBar.pushMessage(msg, level=level, duration=duration)
 
 
-def getCoverage(task, urlGetCoverage: str, covId: str) -> dict:
+def getCoverage(task, urlGetCoverage: str, covId: str, authcfg: str = '') -> dict:
     """Requests get coverage using QgsNetworkAccessManager"""
     logInfoMessage('Requested URL: ' + urlGetCoverage)
     try:
         networkManager = QgsNetworkAccessManager()
-        resultGetCoverage = networkManager.blockingGet(QNetworkRequest(QUrl(urlGetCoverage)))
+        resultGetCoverage = networkManager.blockingGet(QNetworkRequest(QUrl(urlGetCoverage)), authCfg = authcfg)
         replyContent = resultGetCoverage.content()
     except HTTPError as e:
         logWarnMessage(str(e))
@@ -1130,7 +1161,7 @@ def getCoverage(task, urlGetCoverage: str, covId: str) -> dict:
         logWarnMessage(str(e))
         logWarnMessage(str(e.read().decode()))
         return None
-    except:
+    except Exception:
         return None
     try:
         replyString = bytes(replyContent).decode()
@@ -1138,14 +1169,14 @@ def getCoverage(task, urlGetCoverage: str, covId: str) -> dict:
         coverageXmlMainTag = root.tag
         if 'ExceptionReport' in coverageXmlMainTag:
             return None
-    except:
+    except Exception:
         return {'file': replyContent, 'coverage': covId}
 
 
-def sendRequest(request: str) -> str:
+def sendRequest(request: str, authcfg: str = '') -> str:
     networkManager = QgsNetworkAccessManager.instance()
     request = QNetworkRequest(QUrl(request))
-    reply = networkManager.blockingGet(request)
+    reply = networkManager.blockingGet(request, authCfg = authcfg)
     replyContent = reply.content()
     reply = bytes(replyContent).decode()
     return reply
