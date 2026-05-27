@@ -131,7 +131,7 @@ class Capabilities:
     def __initializeFromCapabilitiesResponse(self, capabilitiesXmlResponse: xml.etree.ElementTree) -> None:
 
         operationsMetadataElement = capabilitiesXmlResponse.find(f'{ows_ns}OperationsMetadata')
-        if operationsMetadataElement:
+        if operationsMetadataElement is not None:
             try:
                 self._describeCoverageUrl = operationsMetadataElement.find(f'{ows_ns}Operation[@name="DescribeCoverage"]/{ows_ns}DCP/{ows_ns}HTTP/{ows_ns}Get').attrib.get(f'{xlink_ns}href')
             except Exception:
