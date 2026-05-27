@@ -10,7 +10,7 @@ import os
 import json
 import urllib
 import xml.etree.ElementTree as ET # nosec
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 from urllib.error import HTTPError, URLError
 
 from qgis.PyQt.QtCore import (Qt,
@@ -71,24 +71,24 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         super().__init__(iface.mainWindow())
 
         # Subset coordinates (polygon mode)
-        self.requestXMinPolygon: Optional[float] = None
-        self.requestYMinPolygon: Optional[float] = None
-        self.requestXMaxPolygon: Optional[float] = None
-        self.requestYMaxPolygon: Optional[float] = None
+        self.requestXMinPolygon: float | None = None
+        self.requestYMinPolygon: float | None = None
+        self.requestXMaxPolygon: float | None = None
+        self.requestYMaxPolygon: float | None = None
 
         # Subset coordinates (canvas mode)
-        self.requestXMinCanvas: Optional[float] = None
-        self.requestYMinCanvas: Optional[float] = None
-        self.requestXMaxCanvas: Optional[float] = None
-        self.requestYMaxCanvas: Optional[float] = None
+        self.requestXMinCanvas: float | None = None
+        self.requestYMinCanvas: float | None = None
+        self.requestXMaxCanvas: float | None = None
+        self.requestYMaxCanvas: float | None = None
 
-        self.coverageBoundingBox: Optional[BoundingBox] = None
-        self.subsetBoundingBox: Optional[BoundingBox] = None
+        self.coverageBoundingBox: BoundingBox | None = None
+        self.subsetBoundingBox: BoundingBox | None = None
 
-        self.capabilities: Optional[Capabilities] = None
-        self.describeCov: Optional[DescribeCoverage] = None
+        self.capabilities: Capabilities | None = None
+        self.describeCov: DescribeCoverage | None = None
 
-        self.sketchingToolAction: Optional[QAction] = None
+        self.sketchingToolAction: QAction | None = None
 
         self.mapCrs: str = self.getMapCrs()
 
@@ -209,10 +209,10 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
             return serviceName
         return f"{service['url']} [{service['version']}]"
 
-    def getSelectedSavedServiceIndex(self) -> Optional[int]:
+    def getSelectedSavedServiceIndex(self) -> int | None:
         return self.cbSavedServices.currentData()
 
-    def normalizeSavedService(self, service: dict) -> Optional[dict[str,str]]:
+    def normalizeSavedService(self, service: dict) -> dict[str,str] | None:
         if not isinstance(service, dict):
             return None
 
@@ -250,7 +250,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
 
         self.refreshSavedServicesCombo(selectLastService=True)
 
-    def persistSavedServices(self, selectedIndex: Optional[int] = None) -> None:
+    def persistSavedServices(self, selectedIndex: int | None = None) -> None:
         self.settings.setValue(SETTINGS_SAVED_SERVICES, json.dumps(self.savedServices))
 
         if selectedIndex is None:
@@ -261,7 +261,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
             self.settings.remove(SETTINGS_LAST_SERVICE)
 
     def refreshSavedServicesCombo(self,
-                                  selectedIndex: Optional[int] = None,
+                                  selectedIndex: int | None = None,
                                   selectLastService: bool = False) -> None:
         currentLabel = None
         if selectLastService:
