@@ -755,7 +755,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
             if capabilitiesXmlMainTag != f'{wcs_ns}Capabilities':
                 raise CapabilitiesException('Error: Could not read capabilities for this service')
             capabilitiesXml = ET.ElementTree(ET.fromstring(capabilitiesStr)) # nosec
-        except:
+        except Exception:
             raise CapabilitiesException('Error: Could not read capabilities for this service')
 
         return capabilitiesXml
@@ -787,7 +787,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
             if coverageXmlMainTag != f'{wcs_ns}CoverageDescriptions':
                 raise DescribeCoverageException('Error: Could not read describeCoverage for this service')
             describeCoverageXml = ET.ElementTree(ET.fromstring(coverageStr)) # nosec
-        except:
+        except Exception:
             raise DescribeCoverageException('Error: Could not read describeCoverage for this service')
 
         return describeCoverageXml
@@ -861,7 +861,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
                     y_1 = float(y_1)
                     x_2 = float(x_2)
                     y_2 = float(y_2)
-                except:
+                except Exception:
                     warningMessage = 'No bounding box available for this coverage'
                     self.writeToPluginMessageBar(warningMessage)
                     logWarnMessage(warningMessage)
@@ -1161,7 +1161,7 @@ def getCoverage(task, urlGetCoverage: str, covId: str, authcfg: str = '') -> dic
         logWarnMessage(str(e))
         logWarnMessage(str(e.read().decode()))
         return None
-    except:
+    except Exception:
         return None
     try:
         replyString = bytes(replyContent).decode()
@@ -1169,7 +1169,7 @@ def getCoverage(task, urlGetCoverage: str, covId: str, authcfg: str = '') -> dic
         coverageXmlMainTag = root.tag
         if 'ExceptionReport' in coverageXmlMainTag:
             return None
-    except:
+    except Exception:
         return {'file': replyContent, 'coverage': covId}
 
 
