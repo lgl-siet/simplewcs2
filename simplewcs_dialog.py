@@ -141,9 +141,7 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         Sets up the QGIS QgsAuthSettingsWidget, used for managing authentications.
         """
         authcfg = self.get_auth_configID()
-        # TODO add parent for QgsAuthSettingsWidget to simplewcs_dialog_base.ui to ensure a better look
-        self.auth_gui = QgsAuthSettingsWidget(self.tabUrl, configId = authcfg, dataprovider = 'wcs')
-        self.auth_gui.move(20,320) 
+        self.auth_gui = QgsAuthSettingsWidget(self.serviceAuth, configId = authcfg, dataprovider = 'wcs')
         self.auth_gui.removeBasicSettings()
 
     def get_auth_configID(self, service_index: int | None = None) -> str:
