@@ -146,25 +146,6 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         # remove Basic Auth Tab so only the auth configID matters
         self.auth_gui.removeBasicSettings()
 
-        authcfg = self.get_auth_configID()
-        self.auth_gui.setConfigId(authcfg)
-        
-
-    def get_auth_configID(self, service_index: int | None = None) -> str:
-        """returns the auth configID of the service with the given index. If none is given,
-        the configID of the currently selected service is returned.
-
-        Args:
-            service_index (int | None, optional): Index of the saved Service configuration. Defaults to None.
-
-        Returns:
-            str: configID of the authentication cofiguration of the QGIS Authentication Framework.
-        """
-        if not service_index:
-            service_index = self.getSelectedSavedServiceIndex()
-        authcfg = self.savedServices[service_index].get('authcfg','') if isinstance(service_index, int) else ''
-        return authcfg
-
     def setupGetCoverageTab(self) -> None:
         """
         Sets up "Get Coverage" Tab:
