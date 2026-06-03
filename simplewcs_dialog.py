@@ -140,26 +140,11 @@ class SimpleWCSDialog(BASE, GENERATED_CLASS):
         """
         Sets up the QGIS QgsAuthSettingsWidget, used for managing authentications.
         """
-        authcfg = self.get_auth_configID()
-        # TODO add parent for QgsAuthSettingsWidget to simplewcs_dialog_base.ui to ensure a better look
-        self.auth_gui = QgsAuthSettingsWidget(self.tabUrl, configId = authcfg, dataprovider = 'wcs')
-        self.auth_gui.move(20,320) 
+        # Type annotation to use type check features of IDEs
+        self.auth_gui: QgsAuthSettingsWidget
+        
+        # remove Basic Auth Tab so only the auth configID matters
         self.auth_gui.removeBasicSettings()
-
-    def get_auth_configID(self, service_index: int | None = None) -> str:
-        """returns the auth configID of the service with the given index. If none is given,
-        the configID of the currently selected service is returned.
-
-        Args:
-            service_index (int | None, optional): Index of the saved Service configuration. Defaults to None.
-
-        Returns:
-            str: configID of the authentication cofiguration of the QGIS Authentication Framework.
-        """
-        if not service_index:
-            service_index = self.getSelectedSavedServiceIndex()
-        authcfg = self.savedServices[service_index].get('authcfg','') if isinstance(service_index, int) else ''
-        return authcfg
 
     def setupGetCoverageTab(self) -> None:
         """
